@@ -4,6 +4,11 @@
 #include <linux/netfilter_ipv4.h>
 #include <linux/ip.h>
 #include <linux/udp.h>
+#include <linux/if_ether.h>
+
+#define PROTO_UDP	17
+#define DROP_PORT	3050
+#define UDP_HLEN	8
 
 static struct nf_hook_ops nfho;
 
@@ -14,11 +19,23 @@ unsigned int hook_func(const struct nf_hook_ops *ops,
 	struct iphdr *ip_header = (struct iphdr *)skb_network_header(skb);
 	struct udphdr *udp_header;
 
-	/* drop udp packets with dst port 3050 */
-	if (ip_header->protocol == 17) {
+	/* drop udp packets with dst port DROP_PORT */
+	if (ip_header->protocol == PROTO_UDP) {
 		udp_header = (struct udphdr *)skb_transport_header(skb);
-		if (ntohs(udp_header->dest) == 3050) {
-			printk("__galp__: drop packet with dst udp port 3050\n");
+		if (ntohs(udp_header->dest) == DROP_PORT) {
+			char *payload;
+			int len = ntohs(udp_header->len) - UDP_HLEN;
+
+			printk("__galp__: drop packet with dst udp port %d\n", DROP_PORT);
+			payload = kzalloc(len, GFP_KERNEL);
+			if (!payload) {
+				printk("__galp__: NOMEM\n");
+				return NF_DROP;
+			}
+
+			memcpy(payload, (u8 *)udp_header + UDP_HLEN, len);
+			printk("__galp__: %s\n", payload);
+			kfree(payload);
 			return NF_DROP;
 		}
 	}
